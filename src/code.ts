@@ -60,7 +60,7 @@ const isFigmaSolid = (paint: FigmaPaint): paint is SolidPaint => {
 };
 
 // This shows the HTML page in "ui.html".
-figma.showUI(__html__);
+figma.showUI(__html__, {width:400, height:600});
 
 // Calls to "parent.postMessage" from within the HTML page will trigger this
 // callback. The callback will be passed the "pluginMessage" property of the
@@ -166,6 +166,8 @@ figma.ui.onmessage = async (msg) => {
 
     // Get text styles to generate text variants
     const textStyles = figma.getLocalTextStyles();
+
+    //TODO: do stuff here...
 
     // Parse font sizes
     // Create array of font sizes and sort numerically by least to most
@@ -291,10 +293,278 @@ figma.ui.onmessage = async (msg) => {
       colors: finalColors,
     };
 
-    figma.ui.postMessage(JSON.stringify(theme, null, 2));
+    figma.ui.postMessage({
+      type: "jsonTheme",
+      message: JSON.stringify(theme, null, 2),
+    });
+  }
+
+
+  if(msg.type === "getTheme"){
+    console.log("getting theme");
+    const typog = figma.getLocalTextStyles();
+    const paints = figma.getLocalPaintStyles();
+    const objTypogResult = {};
+    const objPaintResult = {};
+
+    typog.forEach((item)=>{//get typography
+      var objTp = textStyleToJson(item);
+
+      var typographyNameTx = item.name;
+      var typTrimDashes = typographyNameTx.replace(/(\-)/gi,"");//typographyNameTx.;
+      var typTrimed = trimForwardSlash(typTrimDashes);
+      var sudoTypog = camelCase(typTrimed);
+      //console.log("sudoTypog",sudoTypog);
+
+      objTypogResult[sudoTypog] = objTp;
+    });
+
+    paints.forEach((item)=>{//get typography
+      //var objTp = textStyleToJson(item);
+
+      var paintNameTx = item.name;
+      var paintTrimDashes = paintNameTx.replace(/(\-)/gi,"");//
+      var paintTrimed = trimForwardSlash(paintTrimDashes);
+      var sudoPaint = camelCase(paintTrimed);
+      ///console.log("sudoTypog",sudoTypog);
+
+      objPaintResult[sudoPaint] = paintToColor(item);
+    });
+
+    var result = {
+      typography: objTypogResult,
+      palette: objPaintResult,
+    };
+
+    figma.ui.postMessage({
+      type: "jsonTheme",
+      message: result,
+    });
+    
+
   }
 
   // Make sure to close the plugin when you're done. Otherwise the plugin will
   // keep running, which shows the cancel button at the bottom of the screen.
-  figma.closePlugin();
+  //figma.closePlugin();
 };
+
+
+function lineHeight(lineHeightObject){
+  const lineHeightUnit = lineHeightObject.unit;
+  const lineHeightValue = lineHeightObject.value;
+
+  switch(lineHeightUnit){
+    case "AUTO":///WTF!!!
+      return {
+        lineHeight: "normal", 
+      };
+    case "PIXELS":
+      return {
+        lineHeight: lineHeightValue+"px",
+      };
+    case "PERCENT":
+      return {
+        lineHeight: lineHeightValue+"px",
+      };
+    default:
+      return {};
+  }
+}
+
+function letterSpacing(letterSpacingObject){
+  const letterSpacingUnit = letterSpacingObject.unit;
+  const letterSpacingValue = new Number(letterSpacingObject.value);
+  if(letterSpacingValue == 0) return {};
+  switch(letterSpacingUnit){
+    case "PIXELS":///WTF!!!
+      return {
+        letterSpacing: letterSpacingValue.toFixed(2)+"px", 
+      };
+    case "PERCENT":
+      return {
+        letterSpacing: letterSpacingValue.toFixed(2)+"%", 
+      };
+    default:
+      return {};
+  }
+}
+
+function textDecoration(textDecoration){
+  //"UNDERLINE"
+  switch(textDecoration){
+    case "UNDERLINE":///WTF!!!
+      return {textDecorationLine: "underline"}
+    default:
+      return {};
+  }
+}
+
+function fontStyleToWeight(style){
+  switch(style){
+    case "Bold":
+      return {
+        fontStyle: "normal",
+        fontWeight: "bold",
+      };
+    case "SemiBold":
+      return {
+        fontStyle: "normal",
+        fontWeight: "600",
+      };
+    case "Medium":
+      return {
+        fontStyle: "normal",
+        fontWeight: "500",
+      };
+    case "Regular":
+      return {
+        fontStyle: "normal",
+        fontWeight: "normal",
+      };
+    case "Light":
+      return {
+        fontStyle: "normal",
+        fontWeight: "300",
+      };
+    default:
+      return {};
+  }
+}
+
+//CAMEL CASE
+function trimForwardSlash(text){
+  var index = text.lastIndexOf("/");
+  if(index == -1) return text;
+  return text.substr(index+1);
+}
+
+function capitalizeFirstLetter(string) {
+  return string.charAt(0).toUpperCase() + string.slice(1);
+}
+
+function camelCase(text){
+  //["a","b","c"].reduce((a,x)=>a+x, "-")
+  const lwrText = text.toLowerCase();
+  const array = lwrText.split(" ");
+  return array.reduce((accum, val)=> accum + capitalizeFirstLetter(val.toLowerCase()));
+}
+//----
+
+function getScriptName(longName){
+  var lastPart = trimForwardSlash(longName);
+  return camelCase(lastPart);
+}
+
+
+function textCase(textCase){
+  switch(textCase){
+    case "UPPER":
+      return {
+        textTransform: "uppercase",
+      };
+    default:
+      return {};
+  }
+}
+
+function paintToColor(paintObject){//maybe handle gradients?
+  const r = (Number(paintObject.color.r)*255).toFixed(0);
+  const g = (Number(paintObject.color.g)*255).toFixed(0);
+  const b = (Number(paintObject.color.b)*255).toFixed(0);
+  if(paintObject.opacity == 1){
+    return `rgb(${r},${g},${b})`;
+  }else{
+    const o = Number(paintObject.opacity).toFixed(2);
+    return `rgba(${r},${g},${b},${o})`;
+  }
+}
+
+function spread(rootObject, spreadWith){
+  for(var key in spreadWith){
+    rootObject[key] = spreadWith[key];
+  }
+}
+
+
+function textStyleToJson(textStyle){
+
+  const fontStyleProps = fontStyleToWeight(textStyle.fontName.style);
+  const lineHeightProps = lineHeight(textStyle.lineHeight);
+  const letterSpacingProps = letterSpacing(textStyle.letterSpacing);
+
+  const result: any = {
+    fontFamily: textStyle.fontName.family,
+  };
+  spread(result, fontStyleProps);
+  
+  result.fontSize = textStyle.fontSize + "px";
+  spread(result, lineHeightProps);
+  spread(result, letterSpacingProps);
+  spread(result, textDecoration(textStyle.textDecoration));
+  spread(result, textCase(textStyle.textCase));
+
+  return result;
+}
+
+
+figma.on("selectionchange", () => {
+  console.log("got selection", figma.currentPage.selection);
+  //inspect selection
+  const selection = figma.currentPage.selection[0];
+  let result = {};
+  let htmlElement:HTMLElement;
+  let html = "";
+  let typographyName = "";
+  let colour;
+  let colourName;
+
+  //if is text node, get text style
+  if(selection != null && selection.constructor.name == "TextNode"){
+    //@ts-ignore
+    const styleId = selection.textStyleId;
+    const textStyle = figma.getStyleById(styleId);
+    result = textStyle.name;
+    typographyName = textStyle.name;
+
+    var asJson = textStyleToJson(textStyle);
+    result = asJson;
+    //@ts-ignore
+    var textContent = selection.characters;
+
+
+
+    
+
+  }
+
+  if(selection != null){//??
+    //color (not just text)
+    //@ts-ignore
+    const colourStyleId = selection.fillStyleId;
+    const colourFillStyle = figma.getStyleById(colourStyleId);
+    if(colourFillStyle != null){
+      colourName = colourFillStyle.name;
+      //@ts-ignore
+      const paint = colourFillStyle.paints[0];
+
+      colour = paintToColor(paint);
+    }
+  }
+
+
+
+
+
+
+
+  figma.ui.postMessage({
+    type: "selection",
+    message: result,
+    content: textContent,
+    typographyName: typographyName,
+    colourName: colourName,
+    colour: colour,
+  });
+
+});
